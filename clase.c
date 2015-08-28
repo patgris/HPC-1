@@ -1,3 +1,7 @@
+/*
+Rafael Pinzón Rivera 1088313004
+*/
+
 #include <stdio.h>
 #include <cuda.h>
 #include <stdlib.h>
@@ -9,7 +13,7 @@ __global__ void vecAdd(int *A, int *B, int *C, int n){
 			//blockIdx.x;
   if (i < n){
 		C[i] = A[i] + B[i];
-	    printf("%d\n",C[i]);
+	    printf("%d + %d = %d\n",A[i], B[i], C[i]);
   }
 }
 int vectorAdd( int *A, int *B, int *C, int n){
