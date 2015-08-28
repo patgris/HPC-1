@@ -13,7 +13,7 @@ __global__ void vecAdd(int *A, int *B, int *C, int n){
 			//blockIdx.x;
   if (i < n){
 		C[i] = A[i] + B[i];
-	    printf("%d + %d = %d\n",A[i], B[i], C[i]);
+	    printf("%d. %d + %d = %d\n",i, A[i], B[i], C[i]);
   }
 }
 int vectorAdd( int *A, int *B, int *C, int n){
