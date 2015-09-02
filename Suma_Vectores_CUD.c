@@ -6,17 +6,21 @@ Rafael Pinzón Rivera 1088313004
 #include <cuda.h>
 #include <stdlib.h>
 #include <time.h>
-#define SIZE 1024
+#include <math.h>
+#define SIZE 2000
+#define BLOCKSIZE 1024
 
 __global__ void vecAdd(int *A, int *B, int *C, int n){
-	int i = threadIdx.x;
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	//int i = threadIdx.x;
+
 			//blockIdx.x;
   if (i < n){
 		C[i] = A[i] + B[i];
 	    printf("%d. %d + %d = %d\n",i, A[i], B[i], C[i]);
   }
 }
-int vectorAdd( int *A, int *B, int *C, int n){
+int vectorAddGPU( int *A, int *B, int *C, int n){
 	int size = n*sizeof(int);
 	int *d_A, *d_B, *d_C;
 	//Reservo Memoria en el dispositivo
@@ -27,7 +31,10 @@ int vectorAdd( int *A, int *B, int *C, int n){
 	cudaMemcpy(d_A, A, size, cudaMemcpyHostToDevice);
 	cudaMemcpy(d_B, B, size, cudaMemcpyHostToDevice);
 	// Ejecuto el Kernel (del dispositivo)
-	vecAdd<<< 1, n >>>(d_A, d_B, d_C, n);
+	int dimGrid = ceil(SIZE/BLOCKSIZE);
+	printf("%d\n", dimGrid);
+	vecAdd<<< dimGrid, BLOCKSIZE >>>(d_A, d_B, d_C, n);
+	// vecAdd<<< HILOS, BLOCKES >>>
 	cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost);
 	cudaFree(d_A);
 	cudaFree(d_B);
@@ -35,14 +42,22 @@ int vectorAdd( int *A, int *B, int *C, int n){
 	return 0;
 }
 
+int vectorAddCPU( int *A, int *B, int *C, int n){
+	int i;
+	for(i=0;i< n; i++){
+		C[i]=A[i]+B[i];
+		printf("%d. %d+", i, A[i]);
+		printf("%d=",B[i]);
+		printf("%d\n",C[i]);
+	}
+	return 0;
+}
+
 int main(){
 	int *A=(int *) malloc(SIZE*sizeof(int));
-	
 	int *B=(int *) malloc(SIZE*sizeof(int));
-	
 	int *C=(int *) malloc(SIZE*sizeof(int));
-	time_t inicio,fin;
-	inicio=time(NULL);
+	time_t inicioCPU, inicioGPU,finCPU, finGPU;
 	int i;
 	for(i=0;i< SIZE; i++){
 		A[i]=rand()%21;
@@ -51,9 +66,17 @@ int main(){
 		// B[i]=srand(time(NULL));
 	
 	}
-	vectorAdd(A, B, C, SIZE);
-	fin=time(NULL);
-	printf("El tiempo es: %f\n",difftime(fin,inicio));
+	// Ejecuto por GPU
+	inicioGPU=time(NULL);
+	vectorAddGPU(A, B, C, SIZE);
+	finGPU = time(NULL);
+	// Ejecuto por CPU
+	inicioCPU=time(NULL);
+	vectorAddCPU(A, B, C, SIZE);
+	finCPU=time(NULL);
+
+	printf("El tiempo GPU es: %f\n",difftime(finGPU,inicioGPU));
+	printf("El tiempo CPU es: %f\n",difftime(finCPU,inicioCPU));
 	free(A);
 	free(B);
 	return 0;
