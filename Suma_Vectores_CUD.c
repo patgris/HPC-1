@@ -8,7 +8,7 @@ Rafael Pinzón Rivera 1088313004
 #include <time.h>
 #include <math.h>
 #define SIZE 2000
-#define BLOCKSIZE 1
+#define BLOCKSIZE 1024
 
 __global__ void vecAdd(int *A, int *B, int *C, int n){
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -34,7 +34,7 @@ int vectorAddGPU( int *A, int *B, int *C, int n){
 	int dimGrid = ceil(SIZE/BLOCKSIZE);
 	printf(" DimGrid %d\n", dimGrid);
 	vecAdd<<< dimGrid, BLOCKSIZE >>>(d_A, d_B, d_C, n);
-	// vecAdd<<< HILOS, BLOCKES >>>
+	// vecAdd<<< DIMGRID, HILOS >>>
 	cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost);
 	cudaFree(d_A);
 	cudaFree(d_B);
