@@ -7,7 +7,7 @@ Archivos:
 - SumaVectoresCuda : tiene lo que se hizo ultimamente.
 - SumaVectores: Solo suma CPU.
 
-```SQL
-SELECT sID
-From Students
+```Python
+def hola()
+  print "que hace"
 ```
