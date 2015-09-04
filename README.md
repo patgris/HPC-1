@@ -8,6 +8,6 @@ Archivos:
 - SumaVectores: Solo suma CPU.
 
 ```Python
-def hola()
+def hola():
   print "que hace"
 ```
