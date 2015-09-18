@@ -6,6 +6,7 @@
 #define SIZEx 3.0
 #define SIZEy 3.0
 #define BLOCKSIZE 32.0
+#define TILE_WIDTH 16
 
 __global__ void vecAdd(int *A, int *B, int *C, int n){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -25,18 +26,12 @@ __global__ void MatrixSumKernel(int *d_M, int *d_N, int *d_P, int Width){
         d_P[Row*Width + Col] = d_M[Row*Width +  Col] + d_N[Row*Width +  Col];
         // printf("%d\n", d_P[Row*Width + Col]);
     }
-  // if (Row < Width) && (Col < Width){
-    //     int Pvalue = 0;
-    //     int k;
-    //     for (k =0; k<Width; ++k){
-    //         Pvalue += d_M[Row*Width +]
-    //     }
   
 }
 
 __global__ void MatrixMulKernel(int *d_M, int *d_N, int *d_P, int Width){
-    int Row = blockIdx.x * blockDim.x + threadIdx.x;
-    int Col = blockIdx.y * blockDim.y + threadIdx.y;
+    int Row = blockIdx.y * blockDim.y + threadIdx.y;
+    int Col = blockIdx.x * blockDim.x + threadIdx.x;
     if ((Row < Width) && (Col < Width)){
         int Pvalue = 0;
         int k;
@@ -46,8 +41,44 @@ __global__ void MatrixMulKernel(int *d_M, int *d_N, int *d_P, int Width){
         d_P[Row*Width+Col] = Pvalue;
     }
 }
+
+__global__ void MatrixMulKernelSec(int *d_M, int *d_N, int *d_P, int Width){
+    __shared__ int Mds[TILE_WIDTH][TILE_WIDTH];
+    __shared__ int Nds[TILE_WIDTH][TILE_WIDTH];
+
+    int bx = blockIdx.x; int by = blockIdx.y;
+    int tx = threadIdx.x; int ty = threadIdx.y;
+
+    // Identify the row and column of the d_P element to work on
+
+    int Row = by * TILE_WIDTH + ty;
+    int Col = bx * TILE_WIDTH + tx;
+
+    float Pvalue = 0;
+
+    // Loop over the d_M and d_N tiles required to compute d_P element
+    int m;
+    for (m = 0; m < Width/TILE_WIDTH; ++m)
+    {
+        
+        // Coolaborative loading of d_M and d_N tiles into shared memory
+
+        Mds[ty][tx] = d_M[Row*Width + m*TILE_WIDTH + tx];
+        Mds[ty][tx] = d_M[(m*TILE_WIDTH + ty)*Width + Col];
+        __syncthreads();
+        int k;
+        for (k = 0; k < TILE_WIDTH; ++k)
+        {
+            Pvalue += Mds[ty][k] * Nds[k][tx];
+        }
+        __syncthreads();
+    }
+    d_P[Row*Width + Col] = Pvalue;
+
+}
+
 void MatrixSum(int *d_M, int *d_N, int *d_P, int Width){
-    int i; int cont=0, imp;
+    int i; 
   int n = sqrt(Width);
     for (i = 0; i < n; ++i)
     {
@@ -59,19 +90,6 @@ void MatrixSum(int *d_M, int *d_N, int *d_P, int Width){
             d_P[i*n + j] = d_M[i*n +  j] + d_N[i*n +  j];
         }
     }
-  
-  // printf("Resultado CPU\n");
-  // for (imp = 0; imp < Width; ++imp){
-  //     if ( cont < n) {
-  //         printf("%d ", d_P[imp]);
-  //       cont= cont + 1;
-  //     }
-  //     else{
-  //         printf("\n%d ", d_P[imp]);
-  //       cont = 0;
-  //     }
-  //   }
-  // printf("\nResultado CPU\n");
   
 }
 
@@ -102,7 +120,7 @@ int vectorAddGPU( int *A, int *B, int *C, int n){
 
 int matrixAddGPU( int *A, int *B, int *C, int n){
     int size = n*sizeof(int);
-    int *d_A, *d_B, *d_C; int cont=0; int imp; n=sqrt(n);
+    int *d_A, *d_B, *d_C; n=sqrt(n);
     //Reservo Memoria en el dispositivo
     cudaMalloc((void **)&d_A, size);
     cudaMalloc((void **)&d_B, size);
@@ -120,20 +138,6 @@ int matrixAddGPU( int *A, int *B, int *C, int n){
     MatrixSumKernel<<< dimGrid, dimBlock >>>(d_A, d_B, d_C, n);
     // vecAdd<<< DIMGRID, HILOS >>>
     cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost);
-  //   printf("Resultado GPU\n");
-  
-  //   for (imp = 0; imp < n*n; imp++){
-  //     if ( cont < n ) {
-  //         printf("%d ", C[imp]);
-  //       cont= cont + 1;
-  //     }
-  //     else{
-  //         printf("\n%d ", C[imp]);
-  //       cont = 0;
-  //     }
-  //   }
-    
-  // printf("\nResultado GPU\n");
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
@@ -142,7 +146,7 @@ int matrixAddGPU( int *A, int *B, int *C, int n){
 
 int matrixMulGPU( int *A, int *B, int *C, int n){
     int size = n*sizeof(int);
-    int *d_A, *d_B, *d_C; int cont=0; int imp; n=sqrt(n);
+    int *d_A, *d_B, *d_C; n=sqrt(n);
     //Reservo Memoria en el dispositivo
     cudaMalloc((void **)&d_A, size);
     cudaMalloc((void **)&d_B, size);
@@ -154,26 +158,11 @@ int matrixMulGPU( int *A, int *B, int *C, int n){
     //int dimGrid = ceil(SIZE/BLOCKSIZE);
   
     dim3 dimBlock(BLOCKSIZE, BLOCKSIZE, 1);
-    dim3 dimGrid(ceil(SIZEx/BLOCKSIZE),ceil(SIZEy/BLOCKSIZE) , 1);
+    dim3 dimGrid(ceil(n/BLOCKSIZE),ceil(n/BLOCKSIZE) , 1);
   
     printf(" DimGrid %f\n", ceil(SIZEx/BLOCKSIZE));
     MatrixMulKernel<<< dimGrid, dimBlock >>>(d_A, d_B, d_C, n);
-    // vecAdd<<< DIMGRID, HILOS >>>
     cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost);
-  //   printf("Resultado GPU\n");
-  
-  //   for (imp = 0; imp < n*n; imp++){
-  //     if ( cont < n ) {
-  //         printf("%d ", C[imp]);
-  //       cont= cont + 1;
-  //     }
-  //     else{
-  //         printf("\n%d ", C[imp]);
-  //       cont = 0;
-  //     }
-  //   }
-    
-  // printf("\nResultado GPU\n");
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
@@ -184,15 +173,13 @@ int vectorAddCPU( int *A, int *B, int *C, int n){
     int i;
     for(i=0;i< n; i++){
         C[i]=A[i]+B[i];
-        //printf("%d. %d+", i, A[i]);
-    //printf("%d=",B[i]);
-        //printf("%d\n",C[i]);
+
     }
     return 0;
 }
 
 int main(){
-    int j; int imp, imp2, cont=0, cont2=0;
+    int j; int imp, imp2;
     int SIZES[] = {4};
     for (j = 0; j < sizeof(SIZES)/sizeof(SIZES[0]); ++j)
     {
@@ -224,23 +211,12 @@ int main(){
         printf("El tiempo GPU es: %f\n",(double)(finGPU - inicioGPU) / CLOCKS_PER_SEC);
         printf("El tiempo CPU es: %f\n",(double)(finCPU - inicioCPU) / CLOCKS_PER_SEC);
     
-    
-    // for (imp = 0; imp < SIZES[j]; ++imp){
-    //   if ( cont < sqrt(SIZES[j]) ) {
-    //       printf("%d + %d = %d \n", A[imp], B[imp], C[imp]);
-    //     cont= cont + 1;
-    //   }
-    //   else{
-    //       printf("\n%d ", A[imp]);
-    //     cont = 0;
-    //   }
-    // }
         
         for (imp = 0; imp < sqrt(SIZES[j]); ++imp)
         {
             for (imp2 = 0; imp2 < sqrt(SIZES[j]); ++imp2)
             {
-                printf("%d ", A[imp+imp2]);
+                printf("%d ", A[imp*2+imp2]);
             }
             printf("\n");
         }
@@ -249,7 +225,7 @@ int main(){
         {
             for (imp2 = 0; imp2 < sqrt(SIZES[j]); ++imp2)
             {
-                printf("%d ", B[imp+imp2]);
+                printf("%d ", B[imp*2+imp2]);
             }
             printf("\n");
         }
@@ -259,25 +235,10 @@ int main(){
         {
             for (imp2 = 0; imp2 < sqrt(SIZES[j]); ++imp2)
             {
-                printf("%d ", C[imp+imp2]);
+                printf("%d ", C[imp*2+imp2]);
             }
             printf("\n");
         }
-
-    
-    // printf("\n\n");
-    
-    // for (imp2 = 0; imp2 < SIZES[j]; ++imp2){
-    //   if ( cont2 < sqrt(SIZES[j]) ) {
-    //       printf("%d ", B[imp2]);
-    //     cont2= cont2 + 1;
-    //   }
-    //   else{
-    //       printf("\n%d ", B[imp2]);
-    //     cont2 = 0;
-    //   }
-    // }
-    
     
         free(A);
         free(B);
