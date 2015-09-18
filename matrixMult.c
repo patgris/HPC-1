@@ -186,7 +186,8 @@ int main(){
         int *A=(int *) malloc(SIZES[j]*sizeof(int));
         int *B=(int *) malloc(SIZES[j]*sizeof(int));
         int *C=(int *) malloc(SIZES[j]*sizeof(int));
-        
+        int Row = sqrt(SIZES[j]);
+        int Col = sqrt(SIZES[j]);
         clock_t inicioCPU, inicioGPU,finCPU, finGPU;
         int i;
         printf("Tamano matriz %d\n", SIZES[j]);
@@ -212,30 +213,30 @@ int main(){
         printf("El tiempo CPU es: %f\n",(double)(finCPU - inicioCPU) / CLOCKS_PER_SEC);
     
         
-        for (imp = 0; imp < sqrt(SIZES[j]); ++imp)
+        for (imp = 0; imp < Row; ++imp)
         {
-            for (imp2 = 0; imp2 < sqrt(SIZES[j]); ++imp2)
+            for (imp2 = 0; imp2 < Col; ++imp2)
             {
-                printf("%d ", A[imp*2+imp2]);
+                printf("%d ", A[imp*Row+imp2]);
             }
             printf("\n");
         }
         printf("\n");
-        for (imp = 0; imp < sqrt(SIZES[j]); ++imp)
+        for (imp = 0; imp < Row; ++imp)
         {
-            for (imp2 = 0; imp2 < sqrt(SIZES[j]); ++imp2)
+            for (imp2 = 0; imp2 < Col; ++imp2)
             {
-                printf("%d ", B[imp*2+imp2]);
+                printf("%d ", B[imp*Row+imp2]);
             }
             printf("\n");
         }
         printf("\n");
 
-        for (imp = 0; imp < sqrt(SIZES[j]); ++imp)
+        for (imp = 0; imp < Row; ++imp)
         {
-            for (imp2 = 0; imp2 < sqrt(SIZES[j]); ++imp2)
+            for (imp2 = 0; imp2 < Col; ++imp2)
             {
-                printf("%d ", C[imp*2+imp2]);
+                printf("%d ", C[imp*Row+imp2]);
             }
             printf("\n");
         }
