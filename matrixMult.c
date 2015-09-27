@@ -6,7 +6,7 @@
 #define SIZEx 3.0
 #define SIZEy 3.0
 #define BLOCKSIZE 32.0
-#define TILE_WIDTH 16
+#define TILE_WIDTH 1
 
 __global__ void vecAdd(int *A, int *B, int *C, int n){
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -42,38 +42,45 @@ __global__ void MatrixMulKernel(int *d_M, int *d_N, int *d_P, int Width){
     }
 }
 
-__global__ void MatrixMulKernelSec(int *d_M, int *d_N, int *d_P, int Width){
+__global__ void MatrixMulKernelSec(int *d_M, int *d_N, int *d_P, int pWidth){
     __shared__ int Mds[TILE_WIDTH][TILE_WIDTH];
     __shared__ int Nds[TILE_WIDTH][TILE_WIDTH];
 
-    int bx = blockIdx.x; int by = blockIdx.y;
-    int tx = threadIdx.x; int ty = threadIdx.y;
+    int lBx = blockIdx.x; int lBy = blockIdx.y;
+    int lTx = threadIdx.x; int lTy = threadIdx.y;
 
     // Identify the row and column of the d_P element to work on
 
-    int Row = by * TILE_WIDTH + ty;
-    int Col = bx * TILE_WIDTH + tx;
+    // int lRow = lBy * TILE_WIDTH + lTy;
+    int lRow = lTx + lBx * blockDim.x;
+    // int lCol = lBx * TILE_WIDTH + lTx;
+    int lCol = lTy + lBy * blockDim.y;
 
     float Pvalue = 0;
 
     // Loop over the d_M and d_N tiles required to compute d_P element
+    printf("%d\n", pWidth/TILE_WIDTH);
     int m;
-    for (m = 0; m < Width/TILE_WIDTH; ++m)
+    for (m = 0; m < pWidth/TILE_WIDTH; ++m)
     {
         
         // Coolaborative loading of d_M and d_N tiles into shared memory
 
-        Mds[ty][tx] = d_M[Row*Width + m*TILE_WIDTH + tx];
-        Mds[ty][tx] = d_M[(m*TILE_WIDTH + ty)*Width + Col];
+        Mds[lTy][lTx] = d_M[(lRow*pWidth) + (m*TILE_WIDTH) + lTy];
+        Nds[lTy][lTx] = d_N[((m*TILE_WIDTH) + lTx)*pWidth + lCol];
+        // printf("%d * %d\n", Mds[lTy][lTx], Nds[lTy][lTx] );
         __syncthreads();
         int k;
         for (k = 0; k < TILE_WIDTH; ++k)
         {
-            Pvalue += Mds[ty][k] * Nds[k][tx];
+            // printf("%d * %d \n", Mds[k][lTx], Nds[lTy][k]);
+            // Pvalue += Mds[lTy][k] * Nds[k][lTx];
+            Pvalue += Mds[k][lTx] * Nds[lTy][k];
         }
         __syncthreads();
     }
-    d_P[Row*Width + Col] = Pvalue;
+    // 
+    d_P[lRow*pWidth + lCol] = Pvalue;
 
 }
 
@@ -144,7 +151,7 @@ int matrixAddGPU( int *A, int *B, int *C, int n){
     return 0;
 }
 
-int matrixMulGPU( int *A, int *B, int *C, int n){
+int MatrixMulGPU( int *A, int *B, int *C, int n){
     int size = n*sizeof(int);
     int *d_A, *d_B, *d_C; n=sqrt(n);
     //Reservo Memoria en el dispositivo
@@ -161,7 +168,9 @@ int matrixMulGPU( int *A, int *B, int *C, int n){
     dim3 dimGrid(ceil(n/BLOCKSIZE),ceil(n/BLOCKSIZE) , 1);
   
     printf(" DimGrid %f\n", ceil(SIZEx/BLOCKSIZE));
-    MatrixMulKernel<<< dimGrid, dimBlock >>>(d_A, d_B, d_C, n);
+    printf("%d\n", n);
+    MatrixMulKernelSec<<< dimGrid, dimBlock >>>(d_A, d_B, d_C, n);
+    // MatrixMulKernel<<< dimGrid, dimBlock >>>(d_A, d_B, d_C, n);
     cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost);
     cudaFree(d_A);
     cudaFree(d_B);
@@ -178,68 +187,68 @@ int vectorAddCPU( int *A, int *B, int *C, int n){
     return 0;
 }
 
-int main(){
-    int j; int imp, imp2;
-    int SIZES[] = {4};
-    for (j = 0; j < sizeof(SIZES)/sizeof(SIZES[0]); ++j)
+void ImprimirMatriz(int *pMatrix,int pRows, int pCols){
+    int lRow, lColumn;
+    for (lRow = 0; lRow < pRows; ++lRow)
     {
-        int *A=(int *) malloc(SIZES[j]*sizeof(int));
-        int *B=(int *) malloc(SIZES[j]*sizeof(int));
-        int *C=(int *) malloc(SIZES[j]*sizeof(int));
-        int Row = sqrt(SIZES[j]);
-        int Col = sqrt(SIZES[j]);
+        for (lColumn = 0; lColumn < pCols; ++lColumn)
+        {
+            printf("%d ", pMatrix[lRow * pRows + lColumn]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
+
+int main(){
+    int lTest;
+    int lArrayTests[] = {4};
+    int lNumberOfTests = sizeof(lArrayTests)/sizeof(lArrayTests[0]);
+    for (lTest = 0; lTest < lNumberOfTests ; ++lTest)
+    {
+        int *A=(int *) malloc(lArrayTests[lTest]*sizeof(int));
+        int *B=(int *) malloc(lArrayTests[lTest]*sizeof(int));
+        int *C=(int *) malloc(lArrayTests[lTest]*sizeof(int));
+        
+        int Rows = sqrt(lArrayTests[lTest]);
+        int Cols = sqrt(lArrayTests[lTest]);
+        
         clock_t inicioCPU, inicioGPU,finCPU, finGPU;
+        
+        int lRandomNumberA;
+        int lRandomNumberB;
         int i;
-        printf("Tamano matriz %d\n", SIZES[j]);
-        for(i=0;i< SIZES[j]; i++){
-            A[i]=rand()%21;
-            B[i]=rand()%21;
+
+        printf("Tamano matriz %d\n", lArrayTests[lTest]);
+        for(i=0 ; i< lArrayTests[lTest]; i++){
+            lRandomNumberA = rand()%21;
+            A[i] = lRandomNumberA;
+            // printf("Random Number A %d A[%d]\n", lRandomNumberA, A[i]);
+            lRandomNumberB = rand()%21;
+            B[i]=lRandomNumberB;
+            // printf("Random Number B %d B[%d]\n", lRandomNumberB, B[i]);
             // A[i]=srand(time(NULL));
             // B[i]=srand(time(NULL));
 
         }
         // Ejecuto por GPU
         inicioGPU=clock();
-        // matrixAddGPU(A, B, C, SIZES[j]);
-        matrixMulGPU(A, B, C, SIZES[j]);
+        // matrixAddGPU(A, B, C, lArrayTests[lTest]);
+        MatrixMulGPU(A, B, C, lArrayTests[lTest]);
         finGPU = clock();
         // Ejecuto por CPU
         inicioCPU=clock();
-        // MatrixSum(A, B, C, SIZES[j]);
+        // MatrixSum(A, B, C, lArrayTests[lTest]);
         finCPU=clock();
 
-        printf("Size %d\n", SIZES[j]);
+        printf("Size %d\n", lArrayTests[lTest]);
         printf("El tiempo GPU es: %f\n",(double)(finGPU - inicioGPU) / CLOCKS_PER_SEC);
         printf("El tiempo CPU es: %f\n",(double)(finCPU - inicioCPU) / CLOCKS_PER_SEC);
     
-        
-        for (imp = 0; imp < Row; ++imp)
-        {
-            for (imp2 = 0; imp2 < Col; ++imp2)
-            {
-                printf("%d ", A[imp*Row+imp2]);
-            }
-            printf("\n");
-        }
-        printf("\n");
-        for (imp = 0; imp < Row; ++imp)
-        {
-            for (imp2 = 0; imp2 < Col; ++imp2)
-            {
-                printf("%d ", B[imp*Row+imp2]);
-            }
-            printf("\n");
-        }
-        printf("\n");
+        ImprimirMatriz(A, Rows, Cols);
+        ImprimirMatriz(B, Rows, Cols);
+        ImprimirMatriz(C, Rows, Cols);
 
-        for (imp = 0; imp < Row; ++imp)
-        {
-            for (imp2 = 0; imp2 < Col; ++imp2)
-            {
-                printf("%d ", C[imp*Row+imp2]);
-            }
-            printf("\n");
-        }
     
         free(A);
         free(B);
