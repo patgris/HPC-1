@@ -169,7 +169,7 @@ int matrixAddGPU( int *A, int *B, int *C, int n){
     return 0;
 }
 
-int MatrixMulGPU( int *A, int *B, int *C, int n){
+int MatrixMulGPU( int *A, int *B, int *C, int n, int pTiled = 0){
     int size = n*sizeof(int);
     int *d_A, *d_B, *d_C; n=sqrt(n);
     //Reservo Memoria en el dispositivo
@@ -187,7 +187,14 @@ int MatrixMulGPU( int *A, int *B, int *C, int n){
  
     //printf(" DimGrid %f\n", ceil(SIZEx/BLOCKSIZE));
     // printf("%d\n", n);
-    MatrixMulKernelSec<<< dimGrid, dimBlock >>>(d_A, d_B, d_C, n);
+    if (pTiled){
+        printf("Tiled\n");
+        MatrixMulKernelSec<<< dimGrid, dimBlock >>>(d_A, d_B, d_C, n);
+    }
+    else{
+        printf("Not Tiled\n");
+        MatrixMulKernel<<< dimGrid, dimBlock >>>(d_A, d_B, d_C, n); 
+    }
     // MatrixMulKernel<<< dimGrid, dimBlock >>>(d_A, d_B, d_C, n);
     cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost);
     cudaFree(d_A);
@@ -238,21 +245,21 @@ void ImprimirMatriz(int *pMatrix, int pRows, int pCols){
 
 int main(){
     int lTest;
-      udtMatrix A;
-      udtMatrix B;
-      A.Rows = 2;
-      A.Cols = 2;
-      B.Rows = 2;
-      B.Cols = 2;
+    udtMatrix A;
+    udtMatrix B;
+    A.Rows = 2;
+    A.Cols = 2;
+    B.Rows = 2;
+    B.Cols = 2;
     
-      udtTest test;
-      test.A = A;
-      test.B = B;
+    udtTest test;
+    test.A = A;
+    test.B = B;
   
-      udtTest lArrayTests[] = {test};
+    udtTest lArrayTests[] = {test};
     
       
-      int lNumberOfTests = sizeof(lArrayTests)/sizeof(lArrayTests[0]);
+    int lNumberOfTests = sizeof(lArrayTests)/sizeof(lArrayTests[0]);
     printf("%d", lNumberOfTests);
       
     int numARows; // number of rows in the matrix A
@@ -264,12 +271,12 @@ int main(){
     
       for ( lTest = 0; lTest < lNumberOfTests ; ++lTest)
     {
-          numARows = lArrayTests[lTest].A.Rows;
-          numAColumns = lArrayTests[lTest].A.Cols;
-          numBRows = lArrayTests[lTest].B.Rows;
-          numBColumns = lArrayTests[lTest].B.Cols;
-          numCRows = lArrayTests[lTest].A.Rows;
-          numCColumns = lArrayTests[lTest].B.Cols;
+        numARows = lArrayTests[lTest].A.Rows;
+        numAColumns = lArrayTests[lTest].A.Cols;
+        numBRows = lArrayTests[lTest].B.Rows;
+        numBColumns = lArrayTests[lTest].B.Cols;
+        numCRows = lArrayTests[lTest].A.Rows;
+        numCColumns = lArrayTests[lTest].B.Cols;
      
         int *A=(int *) malloc(lArrayTests[lTest].A.Rows*lArrayTests[lTest].A.Cols*sizeof(int));
         int *B=(int *) malloc(lArrayTests[lTest].B.Rows*lArrayTests[lTest].B.Cols*sizeof(int));
@@ -278,7 +285,7 @@ int main(){
         //int Rows = sqrt(lArrayTests[lTest]);
         //int Cols = sqrt(lArrayTests[lTest]);
        
-        clock_t inicioCPU, inicioGPU,finCPU, finGPU;
+        clock_t inicioCPU, inicioGPU, inicioGPU_Tiled,finCPU, finGPU, finGPU_Tiled;
        
         int lRandomNumberA;
         int lRandomNumberB;
@@ -296,19 +303,25 @@ int main(){
             // B[i]=srand(time(NULL));
 
         }
-        // Ejecuto por GPU
-        inicioGPU=clock();
-        // matrixAddGPU(A, B, C, lArrayTests[lTest]);
-        MatrixMulGPU(A, B, C, lArrayTests[lTest].A.Rows*lArrayTests[lTest].A.Cols);
-        finGPU = clock();
-        // Ejecuto por CPU
+
+         // Ejecuto por CPU
         inicioCPU=clock();
         MatrixMulCPU(A, B, C, lArrayTests[lTest].A.Rows*lArrayTests[lTest].A.Cols);
         finCPU=clock();
+        // Ejecuto por GPU
+        inicioGPU=clock();
+        MatrixMulGPU(A, B, C, lArrayTests[lTest].A.Rows*lArrayTests[lTest].A.Cols, 0);
+        finGPU = clock();
+        // Ejecuto por GPU con Tiles
+        inicioGPU_Tiled = clock();
+        MatrixMulGPU(A, B, C, lArrayTests[lTest].A.Rows*lArrayTests[lTest].A.Cols, 1);
+        finGPU_Tiled = clock();
+       
 
         //printf("Size %d\n", lArrayTests[lTest]);
-        printf("El tiempo GPU es: %f\n",(double)(finGPU - inicioGPU) / CLOCKS_PER_SEC);
         printf("El tiempo CPU es: %f\n",(double)(finCPU - inicioCPU) / CLOCKS_PER_SEC);
+        printf("El tiempo GPU es: %f\n",(double)(finGPU - inicioGPU) / CLOCKS_PER_SEC);
+        printf("El tiempo GPU Tiled es: %f\n",(double)(finGPU_Tiled - inicioGPU_Tiled) / CLOCKS_PER_SEC);
    
         ImprimirMatriz(A, lArrayTests[lTest].A.Rows, lArrayTests[lTest].A.Cols);
         ImprimirMatriz(B, lArrayTests[lTest].A.Rows, lArrayTests[lTest].A.Cols);
